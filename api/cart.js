@@ -108,26 +108,28 @@ export default async function handler(req, res) {
       // CHECKOUT
       // POST /api/cart?action=checkout
       // body: { "uuid": "OSTUKORVI_UUID" }
-      if (action === "checkout") {
-        const uuid = body.uuid;
+if (action === "checkout") {
+  const uuid = body.uuid;
 
-        if (!uuid) {
-          return res.status(400).json({
-            ok: false,
-            error: "uuid puudub"
-          });
-        }
+  if (!uuid) {
+    return res.status(400).json({
+      ok: false,
+      error: "uuid puudub"
+    });
+  }
 
-        const result = await voogFetch(
-          `/admin/api/ecommerce/v1/carts/${uuid}/checkout`,
-          {
-            method: "POST",
-            body: JSON.stringify({})
-          }
-        );
+  const result = await voogFetch(
+    `/admin/api/ecommerce/v1/carts/${uuid}/checkout`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        cart: {}
+      })
+    }
+  );
 
-        return res.status(result.status).json(result.data);
-      }
+  return res.status(result.status).json(result.data);
+}
 
       // UUE CARTI LOOMINE ÜHE TOOTEGA
       // POST /api/cart
