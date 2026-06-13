@@ -118,18 +118,25 @@ if (action === "checkout") {
     });
   }
 
-  const result = await voogFetch(
-    `/admin/api/ecommerce/v1/carts/${uuid}/checkout`,
-    {
-      method: "POST",
-      body: JSON.stringify({
-        cart: {}
-      })
-    }
-  );
+const cartResult = await voogFetch(
+  `/admin/api/ecommerce/v1/carts/${uuid}?include=items,payment_methods`
+);
 
-  return res.status(result.status).json(result.data);
+if (!cartResult.ok) {
+  return res.status(cartResult.status).json(cartResult.data);
 }
+
+const result = await voogFetch(
+  `/admin/api/ecommerce/v1/carts/${uuid}/checkout`,
+  {
+    method: "POST",
+    body: JSON.stringify({
+      cart: cartResult.data
+    })
+  }
+);
+
+return res.status(result.status).json(result.data);
 
       // UUE CARTI LOOMINE ÜHE TOOTEGA
       // POST /api/cart
