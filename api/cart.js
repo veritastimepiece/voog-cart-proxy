@@ -65,7 +65,7 @@ export default async function handler(req, res) {
     const action = url.searchParams.get("action");
 
     // TEST: toodete nimekiri
-    // /api/cart?action=products
+    // GET /api/cart?action=products
     if (req.method === "GET" && action === "products") {
       const result = await voogFetch(
         "/admin/api/ecommerce/v1/products?include=variants"
@@ -75,7 +75,7 @@ export default async function handler(req, res) {
     }
 
     // CARTI LUGEMINE
-    // /api/cart?uuid=OSTUKORVI_UUID
+    // GET /api/cart?uuid=OSTUKORVI_UUID
     if (req.method === "GET") {
       const uuid = url.searchParams.get("uuid");
 
@@ -86,7 +86,8 @@ export default async function handler(req, res) {
           usage: {
             products: "/api/cart?action=products",
             createCart: "POST /api/cart body: { product_id: 2931504, quantity: 1 }",
-            getCart: "/api/cart?uuid=..."
+            getCart: "/api/cart?uuid=...",
+            checkout: "POST /api/cart?action=checkout body: { uuid: '...' }"
           }
         });
       }
@@ -98,12 +99,39 @@ export default async function handler(req, res) {
       return res.status(result.status).json(result.data);
     }
 
-    // UUE CARTI LOOMINE ÜHE TOOTEGA
-    // POST /api/cart
-    // body: { "product_id": 2931504, "quantity": 1 }
+    // POST päringud:
+    // 1. tavaline cart loomine: POST /api/cart
+    // 2. checkout: POST /api/cart?action=checkout
     if (req.method === "POST") {
       const body = await readBody(req);
 
+      // CHECKOUT
+      // POST /api/cart?action=checkout
+      // body: { "uuid": "OSTUKORVI_UUID" }
+      if (action === "checkout") {
+        const uuid = body.uuid;
+
+        if (!uuid) {
+          return res.status(400).json({
+            ok: false,
+            error: "uuid puudub"
+          });
+        }
+
+        const result = await voogFetch(
+          `/admin/api/ecommerce/v1/carts/${uuid}/checkout`,
+          {
+            method: "POST",
+            body: JSON.stringify({})
+          }
+        );
+
+        return res.status(result.status).json(result.data);
+      }
+
+      // UUE CARTI LOOMINE ÜHE TOOTEGA
+      // POST /api/cart
+      // body: { "product_id": 2931504, "quantity": 1 }
       const product_id = Number(body.product_id);
       const quantity = Number(body.quantity || 1);
 
