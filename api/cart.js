@@ -269,27 +269,61 @@ export default async function handler(req, res) {
     if (req.method === "POST") {
       const body = await readBody(req);
 
-      // CHECKOUT — jätame praegu alles, aga header enam seda ei kutsu.
-      if (action === "checkout") {
-        const uuid = body.uuid;
+// CHECKOUT
+// POST /api/cart?action=checkout
+// body: { "uuid": "OSTUKORVI_UUID" }
+if (action === "checkout") {
+  const uuid = body.uuid;
 
-        if (!uuid) {
-          return res.status(400).json({
-            ok: false,
-            error: "uuid puudub"
-          });
-        }
+  if (!uuid) {
+    return res.status(400).json({
+      ok: false,
+      error: "uuid puudub"
+    });
+  }
 
-        const result = await voogFetch(
-          `/admin/api/ecommerce/v1/carts/${uuid}/checkout`,
-          {
-            method: "POST",
-            body: JSON.stringify({})
-          }
-        );
+  // Loeme enne cart'i, et võtta sealt olemasolev maksemeetod.
+  const cartResult = await getCart(uuid);
 
-        return res.status(result.status).json(result.data);
-      }
+  if (!cartResult.ok) {
+    return res.status(cartResult.status).json(cartResult.data);
+  }
+
+  const cart = cartResult.data;
+  const paymentMethod = Array.isArray(cart.payment_methods)
+    ? cart.payment_methods[0]
+    : null;
+
+  const gateway_code =
+    cart.gateway_code ||
+    paymentMethod?.gateway_code ||
+    paymentMethod?.code ||
+    "offline";
+
+  const payment_method =
+    cart.payment_method ||
+    paymentMethod?.code ||
+    "offline";
+
+  const checkoutBody = {
+    cart: {
+      gateway_code,
+      payment_method
+    }
+  };
+
+  console.log("Checkout body:", checkoutBody);
+
+  const result = await voogFetch(
+    `/admin/api/ecommerce/v1/carts/${uuid}/checkout`,
+    {
+      method: "POST",
+      body: JSON.stringify(checkoutBody)
+    }
+  );
+
+  return res.status(result.status).json(result.data);
+}
 
       // KOGUSE MUUTMINE
       // POST /api/cart?action=setQuantity
