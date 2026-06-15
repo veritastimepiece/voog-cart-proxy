@@ -2,7 +2,7 @@ const VOOG_BASE = "https://bruno-tomberg-design.voog.com";
 
 function sendCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "https://brunotombergdesign.com");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
@@ -53,6 +53,99 @@ async function voogFetch(path, options = {}) {
   };
 }
 
+function getCleanItemsFromCart(cart) {
+  const items = Array.isArray(cart?.items) ? cart.items : [];
+
+  return items
+    .map(item => {
+      const product_id = Number(item.product_id || item.product?.id);
+      const quantity = Number(item.quantity || 1);
+
+      if (!product_id) return null;
+
+      const cleanItem = {
+        product_id,
+        quantity
+      };
+
+      if (item.note) {
+        cleanItem.note = item.note;
+      }
+
+      return cleanItem;
+    })
+    .filter(Boolean);
+}
+
+function addProductToItems(items, product_id, quantity) {
+  const existing = items.find(item => {
+    return Number(item.product_id) === Number(product_id);
+  });
+
+  if (existing) {
+    existing.quantity = Number(existing.quantity || 1) + Number(quantity || 1);
+    return items;
+  }
+
+  items.push({
+    product_id: Number(product_id),
+    quantity: Number(quantity || 1)
+  });
+
+  return items;
+}
+
+async function createCart(product_id, quantity) {
+  return await voogFetch(
+    "/admin/api/ecommerce/v1/carts?include=items,payment_methods",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        items: [
+          {
+            product_id,
+            quantity
+          }
+        ],
+        currency: "EUR",
+        is_initial: true
+      })
+    }
+  );
+}
+
+async function updateCart(uuid, product_id, quantity) {
+  const existingCartResult = await voogFetch(
+    `/admin/api/ecommerce/v1/carts/${uuid}?include=items,payment_methods`
+  );
+
+  if (!existingCartResult.ok) {
+    return await createCart(product_id, quantity);
+  }
+
+  const existingCart = existingCartResult.data;
+
+  if (existingCart.status && existingCart.status !== "created") {
+    return await createCart(product_id, quantity);
+  }
+
+  const existingItems = getCleanItemsFromCart(existingCart);
+  const updatedItems = addProductToItems(existingItems, product_id, quantity);
+
+  const updateResult = await voogFetch(
+    `/admin/api/ecommerce/v1/carts/${uuid}?include=items,payment_methods`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        items: updatedItems,
+        is_initial: true
+      })
+    }
+  );
+
+  return updateResult;
+}
+
 export default async function handler(req, res) {
   sendCors(res);
 
@@ -86,6 +179,7 @@ export default async function handler(req, res) {
           usage: {
             products: "/api/cart?action=products",
             createCart: "POST /api/cart body: { product_id: 2931504, quantity: 1 }",
+            updateCart: "POST /api/cart body: { uuid: '...', product_id: 2931504, quantity: 1 }",
             getCart: "/api/cart?uuid=...",
             checkout: "POST /api/cart?action=checkout body: { uuid: '...' }"
           }
@@ -100,14 +194,12 @@ export default async function handler(req, res) {
     }
 
     // POST päringud:
-    // 1. tavaline cart loomine: POST /api/cart
+    // 1. cart loomine või uuendamine: POST /api/cart
     // 2. checkout: POST /api/cart?action=checkout
     if (req.method === "POST") {
       const body = await readBody(req);
 
-      // CHECKOUT
-      // POST /api/cart?action=checkout
-      // body: { "uuid": "OSTUKORVI_UUID" }
+      // CHECKOUT — praegu jätame olemasoleva lihtsa variandi alles.
       if (action === "checkout") {
         const uuid = body.uuid;
 
@@ -129,9 +221,7 @@ export default async function handler(req, res) {
         return res.status(result.status).json(result.data);
       }
 
-      // UUE CARTI LOOMINE ÜHE TOOTEGA
-      // POST /api/cart
-      // body: { "product_id": 2931504, "quantity": 1 }
+      const uuid = body.uuid || null;
       const product_id = Number(body.product_id);
       const quantity = Number(body.quantity || 1);
 
@@ -142,22 +232,13 @@ export default async function handler(req, res) {
         });
       }
 
-      const result = await voogFetch(
-        "/admin/api/ecommerce/v1/carts?include=items,payment_methods",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            items: [
-              {
-                product_id,
-                quantity
-              }
-            ],
-            currency: "EUR",
-            is_initial: true
-          })
-        }
-      );
+      let result;
+
+      if (uuid) {
+        result = await updateCart(uuid, product_id, quantity);
+      } else {
+        result = await createCart(product_id, quantity);
+      }
 
       return res.status(result.status).json(result.data);
     }
